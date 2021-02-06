@@ -86,6 +86,27 @@ services:
       - PASSWORD=${PASSWORD}
       - DOCKER_MODS=linuxserver/mods:code-server-python3|linuxserver/mods:code-server-zsh|linuxserver/mods:code-server-shellcheck|linuxserver/mods:code-server-nodejs|linuxserver/mods:code-server-docker
 
+
+# portainer
+  portainer:
+    image: portainer/portainer-ce:2.1.1-alpine
+    container_name: portainer
+    privileged: true
+    depends_on:
+      - proxy
+    expose:
+      - 8000
+      - 9000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    restart: always
+    environment:
+      - VIRTUAL_HOST=${STACK_URL}
+      - VIRTUAL_PORT=9000
+      - LETSENCRYPT_HOST=${STACK_URL}
+      - LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}
+
 # proxy
   proxy:
     build: ./proxy
@@ -123,3 +144,4 @@ volumes:
   html:
   mysql_db:
   nextcloud:
+  portainer_data:
