@@ -1,0 +1,20 @@
+---
+platform: linux
+
+image_resource:
+  type: registry-image
+  source: {repository: vito/oci-build-task}
+
+inputs:
+- name: concourse-docker
+- name: linux-rc
+
+outputs:
+- name: image
+
+params:
+  DOCKERFILE: concourse-docker/Dockerfile
+  CONTEXT: .
+
+run:
+  path: build

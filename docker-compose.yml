@@ -1,0 +1,125 @@
+version: '3.2'
+
+services:
+# nextcloud
+  nextcloud_mysql:
+    image: mariadb
+    command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
+    restart: always
+    volumes:
+      - mysql_db:/var/lib/mysql
+    environment:
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+
+  redis:
+    image: redis:alpine
+    restart: always
+
+  nextcloud_app:
+    image: nextcloud:fpm-alpine
+    restart: always
+    volumes:
+      - nextcloud:/var/www/html
+    depends_on:
+      - nextcloud_mysql
+      - redis
+    environment: 
+      - MYSQL_HOST=nextcloud_mysql
+      - REDIS_HOST=redis
+      - NEXTCLOUD_ADMIN_USER=${NEXTCLOUD_ADMIN_USER}
+      - NEXTCLOUD_ADMIN_PASSWORD=${NEXTCLOUD_ADMIN_PASSWORD}
+      - NEXTCLOUD_TRUSTED_DOMAINS=${NEXTCLOUD_URL}
+      - OVERWRITEHOST=${NEXTCLOUD_URL}
+      - OVERWRITEPROTOCOL=https
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+
+  nextcloud_web:
+    build: ./web
+    restart: always
+    volumes:
+      - nextcloud:/var/www/html:ro
+    environment:
+      - VIRTUAL_HOST=${NEXTCLOUD_URL}
+      - LETSENCRYPT_HOST=${NEXTCLOUD_URL}
+      - LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}
+    depends_on:
+      - nextcloud_app
+      - proxy
+
+  nextcloud_cron:
+    image: nextcloud:fpm-alpine
+    restart: always
+    volumes:
+      - nextcloud:/var/www/html
+    entrypoint: /cron.sh
+    depends_on:
+      - nextcloud_mysql
+      - redis
+
+# code-server
+  code:
+    image: linuxserver/code-server 
+    container_name: code
+    privileged: true
+    depends_on:
+      - proxy
+    expose:
+      - 8443
+    restart: unless-stopped
+    volumes:
+      - ${HOME}/.infra_ssh:/config/.ssh
+      - ${HOME}/workspace:/config/workspace
+      - data:/root/.local/share/code-server
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - VIRTUAL_HOST=${CODE_URL}
+      - VIRTUAL_PORT=8443
+      - LETSENCRYPT_HOST=${CODE_URL}
+      - LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}
+      - PUID=1001
+      - PGID=1002
+      - PASSWORD=${PASSWORD}
+      - DOCKER_MODS=linuxserver/mods:code-server-python3|linuxserver/mods:code-server-zsh|linuxserver/mods:code-server-shellcheck|linuxserver/mods:code-server-nodejs|linuxserver/mods:code-server-docker
+
+# proxy
+  proxy:
+    build: ./proxy
+    labels:
+      - "com.github.jrcs.letsencrypt_nginx_proxy_companion.nginx_proxy=true"
+    container_name: proxy
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - certs:/etc/nginx/certs:ro
+      - vhost.d:/etc/nginx/vhost.d:rw
+      - html:/usr/share/nginx/html:rw
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+    restart: unless-stopped
+
+  letsencrypt:
+    image: jrcs/letsencrypt-nginx-proxy-companion
+    container_name: letsencrypt
+    depends_on:
+      - proxy
+    volumes:
+      - certs:/etc/nginx/certs:rw
+      - vhost.d:/etc/nginx/vhost.d:rw
+      - html:/usr/share/nginx/html:rw
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+
+volumes:
+  data:
+  certs:
+  vhost.d:
+  html:
+  mysql_db:
+  nextcloud:
